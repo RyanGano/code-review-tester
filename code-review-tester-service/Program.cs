@@ -1,6 +1,48 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Identity.Web;
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Add authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+
+// Add authorization
+builder.Services.AddAuthorization();
+
+// Add CORS
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173"];
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
 
-app.MapGet("/", () => "I'm ALIVE!");
+// Configure middleware pipeline
+app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Endpoints
+app.MapGet("/", () => "I'm ALIVE!")
+    .RequireAuthorization();
+
+app.MapGet("/user", (HttpContext context) =>
+{
+    var user = context.User;
+    return new
+    {
+        Name = user.Identity?.Name,
+        IsAuthenticated = user.Identity?.IsAuthenticated ?? false,
+        Claims = user.Claims.Select(c => new { c.Type, c.Value }).ToList()
+    };
+}).RequireAuthorization();
 
 app.Run();
